@@ -3,6 +3,8 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 
+#include <cmath>
+
 #include "Hud.hpp"
 #include "State.hpp"
 
@@ -11,7 +13,8 @@ using namespace ticksaver;
 
 // Tick Saver
 //
-// A "tick" is one physics step: GJGameState::m_currentProgress goes up by one per step.
+// A "tick" is a length of time: 1 / (Ticks per second setting), 1/60 s by default, which is one
+// frame of a 60 FPS recording. Time comes from GJGameState::m_levelTime.
 // With a tick save of N:
 //   * Early press: a press made while it cannot be used (in the air, not on an orb) is held.
 //     If the player lands or touches an orb within N ticks, the press is applied then.
@@ -30,6 +33,12 @@ namespace {
 	// Cube, ball, robot and spider jump from the ground. Ship, UFO, wave and swing do not.
 	bool groundBufferable(PlayerObject* p) {
 		return !(p->m_isShip || p->m_isBird || p->m_isDart || p->m_isSwing);
+	}
+
+	// Whole ticks between two level times.
+	int ticksBetween(double from, double to) {
+		if (to <= from) return 0;
+		return static_cast<int>(std::lround((to - from) / tickSeconds()));
 	}
 
 	// Can a press do something right now?
@@ -56,11 +65,11 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 	struct Slot {
 		bool physHeld = false;       // is the physical button held right now?
 		bool pending = false;        // an early press is waiting to become usable
-		unsigned pressTick = 0;
+		double pressTime = 0.0;
 		bool relPending = false;     // a release is being delayed
-		unsigned relTick = 0;
-		bool injectedPress = false;  // we pressed for the player, release it next tick
-		unsigned injectTick = 0;
+		double relTime = 0.0;
+		bool injectedPress = false;  // we pressed for the player, release it next step
+		double injectTime = 0.0;
 	};
 
 	struct Fields {
@@ -72,8 +81,8 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 		return pl && static_cast<GJBaseGameLayer*>(pl) == this;
 	}
 
-	unsigned nowTick() {
-		return m_gameState.m_currentProgress;
+	double nowTime() {
+		return m_gameState.m_levelTime;
 	}
 
 	void handleButton(bool down, int button, bool isPlayer1) {
@@ -85,21 +94,23 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 		int i = isPlayer1 ? 0 : 1;
 		auto player = isPlayer1 ? m_player1 : m_player2;
 		auto& s = m_fields->slot[i];
-		unsigned now = this->nowTick();
+		double now = this->nowTime();
 
 		if (down) {
 			s.physHeld = true;
+			state().seen++;
 
 			// Pressed again while a release was being delayed: the hold just continues.
 			if (s.relPending) {
 				s.relPending = false;
-				state().record(static_cast<int>(now >= s.relTick ? now - s.relTick : 0), "hold");
+				state().record(ticksBetween(s.relTime, now), "hold");
 				return;
 			}
 
 			if (bufferPress() && player && !player->m_isDead && !pressUsableNow(player)) {
 				s.pending = true;
-				s.pressTick = now;
+				s.pressTime = now;
+				state().buffered++;
 			} else {
 				s.pending = false;
 			}
@@ -109,7 +120,7 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 
 			if (extendHold() && player && !player->m_isDead) {
 				s.relPending = true;
-				s.relTick = now;
+				s.relTime = now;
 				return; // swallow the release for now
 			}
 		}
@@ -125,8 +136,9 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 	}
 
 	void tickStep() {
-		unsigned now = this->nowTick();
-		unsigned window = static_cast<unsigned>(tickSave());
+		double now = this->nowTime();
+		double window = static_cast<double>(tickSave()) * tickSeconds();
+		double eps = 1e-6;
 
 		for (int i = 0; i < 2; ++i) {
 			bool isP1 = (i == 0);
@@ -134,28 +146,33 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 			if (!player) continue;
 			auto& s = m_fields->slot[i];
 
-			// Level restarted: the tick counter went backwards.
-			if (now < s.pressTick || now < s.relTick || now < s.injectTick) {
+			// Level restarted: the clock went backwards.
+			if (now + eps < s.pressTime || now + eps < s.relTime || now + eps < s.injectTime) {
 				s = Slot{};
 				continue;
 			}
 
 			// Finish a delayed release.
-			if (s.relPending && now - s.relTick >= window) {
+			if (s.relPending && now - s.relTime + eps >= window) {
 				s.relPending = false;
 				GJBaseGameLayer::handleButton(false, 1, isP1);
 			}
 
 			// Release a press we made for the player.
-			if (s.injectedPress && !s.physHeld && now > s.injectTick) {
+			if (s.injectedPress && !s.physHeld && now > s.injectTime + eps) {
 				s.injectedPress = false;
 				GJBaseGameLayer::handleButton(false, 1, isP1);
 			}
 
 			if (!s.pending) continue;
 
-			if (player->m_isDead || now - s.pressTick > window) {
+			if (player->m_isDead) {
 				s.pending = false;
+				continue;
+			}
+			if (now - s.pressTime > window + eps) {
+				s.pending = false;
+				state().expired++;
 				continue;
 			}
 
@@ -164,14 +181,16 @@ class $modify(TickGameLayer, GJBaseGameLayer) {
 			if (!onRing && !onGround) continue;
 
 			s.pending = false;
-			state().record(static_cast<int>(now - s.pressTick), onRing ? "orb" : "ground");
+			state().record(ticksBetween(s.pressTime, now), onRing ? "orb" : "ground");
 
-			// If the button is still held, the game's own hold handling takes the jump.
-			// If it was already released, press for the player and release next tick.
-			if (onRing || !s.physHeld) {
+			// Make it a fresh click: if the game still thinks the button is down, release first.
+			if (s.physHeld) {
+				GJBaseGameLayer::handleButton(false, 1, isP1);
 				GJBaseGameLayer::handleButton(true, 1, isP1);
-				s.injectedPress = !s.physHeld;
-				s.injectTick = now;
+			} else {
+				GJBaseGameLayer::handleButton(true, 1, isP1);
+				s.injectedPress = true;
+				s.injectTime = now;
 			}
 		}
 	}
