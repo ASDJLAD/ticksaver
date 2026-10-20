@@ -1,0 +1,56 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "yourname.ticksaver",
+	"name": "Tick Saver",
+	"version": "v1.0.0",
+	"developer": "yourname",
+	"description": "Frame-saver / input buffer. Press F6 to cycle the tick save (off, 1, 2, 4, 8 ticks).",
+	"tags": ["gameplay", "utility"],
+	"resources": {
+		"spritesheets": {}
+	},
+	"settings": {
+		"enabled": {
+			"type": "bool",
+			"name": "Enabled",
+			"description": "Master switch for the tick saver. F6 changes the tick amount.",
+			"default": true
+		},
+		"buffer-press": {
+			"type": "bool",
+			"name": "Buffer early presses",
+			"description": "A press made up to N ticks before it can be used (landing, touching an orb) is held and applied when it becomes usable.",
+			"default": true
+		},
+		"buffer-orbs": {
+			"type": "bool",
+			"name": "Include orbs",
+			"description": "Early presses also trigger an orb you touch within N ticks.",
+			"default": true
+		},
+		"buffer-ground": {
+			"type": "bool",
+			"name": "Include ground jumps",
+			"description": "Early presses also jump on landing within N ticks (cube, ball, robot, spider).",
+			"default": true
+		},
+		"extend-hold": {
+			"type": "bool",
+			"name": "Extend holds",
+			"description": "Delays every release by N ticks, and cancels the release if you press again in that time. Makes the game feel delayed on releases, so it is off by default.",
+			"default": false
+		},
+		"show-overlay": {
+			"type": "bool",
+			"name": "Show overlay",
+			"description": "Show the current tick save and how many ticks were used.",
+			"default": true
+		}
+	}
+}
