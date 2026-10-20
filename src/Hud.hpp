@@ -41,8 +41,8 @@ protected:
 		if (!enabled || n == 0) {
 			text = "Tick save: OFF  (F6)";
 		} else {
-			text = fmt::format("Tick save: {}  (F6)\nLast used: {} ({})\nThis attempt: {} ticks / {} saves",
-				n, st.lastUsed, st.lastKind, st.attemptUsed, st.attemptSaves);
+			text = fmt::format("Tick save: {}  (F6)\nLast used: {} ({})\nThis attempt: {} ticks / {} saves\nPresses {}  held {}  expired {}",
+				n, st.lastUsed, st.lastKind, st.attemptUsed, st.attemptSaves, st.seen, st.buffered, st.expired);
 		}
 		m_label->setString(text.c_str());
 		m_label->setVisible(geode::Mod::get()->getSettingValue<bool>("show-overlay"));
