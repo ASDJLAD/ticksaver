@@ -8,7 +8,7 @@
 	},
 	"id": "yourname.ticksaver",
 	"name": "Tick Saver",
-	"version": "v1.0.0",
+	"version": "v1.0.1",
 	"developer": "yourname",
 	"description": "Frame-saver / input buffer. Press F6 to cycle the tick save (off, 1, 2, 4, 8 ticks).",
 	"tags": ["gameplay", "utility"],
@@ -21,6 +21,18 @@
 			"name": "Enabled",
 			"description": "Master switch for the tick saver. F6 changes the tick amount.",
 			"default": true
+		},
+		"tick-rate": {
+			"type": "int",
+			"name": "Ticks per second",
+			"description": "How long one tick is. 60 = one frame of a 60 FPS recording (default). 240 = one physics step at the default 240 TPS.",
+			"default": 60,
+			"min": 30,
+			"max": 480,
+			"control": {
+				"input": true,
+				"slider": true
+			}
 		},
 		"buffer-press": {
 			"type": "bool",
